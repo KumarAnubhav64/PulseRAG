@@ -1,5 +1,7 @@
 """Pydantic contracts shared between the API, services and repositories."""
 
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 
@@ -33,6 +35,20 @@ class AskResponse(BaseModel):
 class TranscriptResponse(BaseModel):
     conversation_id: str
     transcript: str
+
+
+class JobStatus(str, Enum):
+    pending = "pending"
+    processing = "processing"
+    done = "done"
+    failed = "failed"
+
+
+class JobResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    upload: UploadResponse | None = None
+    error: str | None = None
 
 
 class HealthResponse(BaseModel):

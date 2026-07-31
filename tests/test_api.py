@@ -22,6 +22,7 @@ def test_app_factory_registers_routes() -> None:
     # wrap included routers in _IncludedRouter objects (which have no .path).
     paths = set(create_app().openapi()["paths"].keys())
     assert "/upload" in paths
+    assert "/jobs/{job_id}" in paths
     assert "/ask" in paths
     assert "/transcript/{conversation_id}" in paths
     assert "/health" in paths
@@ -58,6 +59,31 @@ def test_upload_too_large_413(client: TestClient) -> None:
     big = b"x" * (26 * 1024 * 1024)  # 26 MB > 25 MB limit
     res = client.post("/upload", files={"audio": ("big.wav", big, "audio/wav")})
     assert res.status_code == 413
+
+
+def test_upload_job_unknown_404(client: TestClient) -> None:
+    res = client.get("/jobs/nope")
+    assert res.status_code == 404
+
+
+def test_upload_job_failure_surfaces_error(client: TestClient, monkeypatch) -> None:
+    """A failing background pipeline marks the job failed with the error."""
+    from app.api import routes
+
+    class _FailingRAG:
+        def ingest(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(routes, "_get_rag_service", lambda: _FailingRAG())
+
+    up = client.post("/upload", files={"audio": ("bad.wav", b"x" * 1024, "audio/wav")})
+    assert up.status_code == 202
+    job_id = up.json()["job_id"]
+
+    body = client.get(f"/jobs/{job_id}").json()
+    assert body["status"] == "failed"
+    assert body["error"] == "boom"
+    assert body["upload"] is None
 
 
 def test_frontend_index_served(client: TestClient) -> None:

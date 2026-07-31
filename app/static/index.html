@@ -460,21 +460,21 @@
   async function uploadAudio(blob, filename) {
     micBtn.disabled = true;
     sendBtn.disabled = true;
-    toast("Uploading & transcribing…");
+    toast("Uploading…");
     const fd = new FormData();
     fd.append("audio", blob, filename);
     try {
       const res = await fetch("/upload", { method: "POST", body: fd });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.detail || `Upload failed (HTTP ${res.status})`);
-      conversationId = d.conversation_id;
+      const upload = await waitForJob(d.job_id);
+      conversationId = upload.conversation_id;
       convId.textContent = conversationId;
-      convStats.textContent = `${d.chunk_count} chunks · ${d.transcript_length} chars`;
       convInfo.hidden = false;
-      const badge = d.demo ? '<span class="badge demo">DEMO</span>' : '<span class="badge real">REAL</span>';
-      convStats.innerHTML = `${d.chunk_count} chunks · ${d.transcript_length} chars ${badge}`;
+      const badge = upload.demo ? '<span class="badge demo">DEMO</span>' : '<span class="badge real">REAL</span>';
+      convStats.innerHTML = `${upload.chunk_count} chunks · ${upload.transcript_length} chars ${badge}`;
       addBotMessage("✅ Audio indexed. You can now ask questions about it.", { small: true });
-      toast(`Uploaded: ${d.chunk_count} chunk(s) indexed`);
+      toast(`Uploaded: ${upload.chunk_count} chunk(s) indexed`);
       emptyState.hidden = true;
     } catch (err) {
       toast(err.message, true);
@@ -482,6 +482,21 @@
       micBtn.disabled = false;
       sendBtn.disabled = false;
       questionInput.focus();
+    }
+  }
+
+  // Poll GET /jobs/{id} until the async transcription+indexing job finishes.
+  async function waitForJob(jobId, maxSeconds = 180) {
+    const t0 = Date.now();
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1200));
+      const res = await fetch("/jobs/" + jobId);
+      const d = await res.json().catch(() => ({}));
+      if (d.status === "done") return d.upload;
+      if (d.status === "failed") throw new Error(d.error || "Processing failed — try again.");
+      const elapsed = Math.round((Date.now() - t0) / 1000);
+      toast(`Transcribing & indexing… ${elapsed}s`);
+      if (elapsed >= maxSeconds) throw new Error("Processing timed out — try again.");
     }
   }
 

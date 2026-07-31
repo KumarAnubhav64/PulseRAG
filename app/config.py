@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # --- Uploads ---
     max_upload_mb: int = 25
 
+    # --- Startup ---
+    # Load the embedding model at boot instead of on the first upload. Keeps
+    # the ~200-300MB model-load spike out of the request path, so an upload
+    # can't push a small instance (e.g. Render free's 512MB) past its memory
+    # limit mid-request. Tests disable this to stay offline.
+    preload_embeddings: bool = True
+
     @property
     def demo_enabled(self) -> bool:
         """Whether Groq-backed calls (STT + LLM) should return mock data."""

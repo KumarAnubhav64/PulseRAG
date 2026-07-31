@@ -1,6 +1,7 @@
 """Speech-to-text via Groq Whisper, with a mock fallback for demo mode."""
 
 import io
+import os
 
 from groq import Groq
 
@@ -21,6 +22,18 @@ _DEMO_TRANSCRIPT = (
 )
 
 
+def _open_audio_source(source: bytes | str | os.PathLike):
+    """Return a file-like object for ``source``.
+
+    ``source`` is either raw audio bytes (legacy callers) or a path to an
+    on-disk audio file (streamed uploads). Passing a path avoids loading the
+    whole file into RAM before the Groq request.
+    """
+    if isinstance(source, (str, os.PathLike)):
+        return open(source, "rb")
+    return io.BytesIO(source)
+
+
 class TranscriptionService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -35,15 +48,19 @@ class TranscriptionService:
             )
         return self._client
 
-    def transcribe(self, audio_bytes: bytes, filename: str) -> tuple[str, bool]:
-        """Return ``(transcript, used_demo)``."""
+    def transcribe(self, source: bytes | str, filename: str) -> tuple[str, bool]:
+        """Return ``(transcript, used_demo)``.
+
+        ``source`` may be audio bytes or a path to an audio file on disk.
+        """
         if self._demo:
             return _DEMO_TRANSCRIPT, True
 
-        # Groq's client expects a file-like object; the tuple form carries the
-        # filename so the extension can drive content-type detection.
-        result = self._get_client().audio.transcriptions.create(
-            file=(filename or "audio.wav", io.BytesIO(audio_bytes)),
-            model=self._settings.groq_stt_model,
-        )
+        with _open_audio_source(source) as file_obj:
+            # Groq's client expects a file-like object; the tuple form carries the
+            # filename so the extension can drive content-type detection.
+            result = self._get_client().audio.transcriptions.create(
+                file=(filename or "audio.wav", file_obj),
+                model=self._settings.groq_stt_model,
+            )
         return result.text, False

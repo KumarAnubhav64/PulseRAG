@@ -16,6 +16,8 @@ import os
 
 os.environ["DEMO_MODE"] = "on"
 os.environ.pop("GROQ_API_KEY", None)
+# Keep the app-lifespan embedding preload out of tests (offline, no model load).
+os.environ["PRELOAD_EMBEDDINGS"] = "false"
 
 import pytest
 from langchain_core.embeddings import Embeddings

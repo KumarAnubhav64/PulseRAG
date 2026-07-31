@@ -55,10 +55,17 @@ def test_health(client: TestClient) -> None:
 
 
 def test_demo_flow(client: TestClient) -> None:
-    # Upload a fake wav → a conversation is created and indexed.
+    # Upload a fake wav → 202 with a job id, then poll until done.
     up = client.post("/upload", files={"audio": ("demo.wav", _fake_wav(), "audio/wav")})
-    assert up.status_code == 201, up.text
-    upload = up.json()
+    assert up.status_code == 202, up.text
+    job_id = up.json()["job_id"]
+    assert job_id
+
+    done = client.get(f"/jobs/{job_id}")
+    assert done.status_code == 200
+    body = done.json()
+    assert body["status"] == "done", body
+    upload = body["upload"]
     conversation_id = upload["conversation_id"]
     assert upload["chunk_count"] >= 1
     assert upload["demo"] is True
@@ -105,3 +112,8 @@ def test_transcript_404(client: TestClient) -> None:
 def test_upload_empty_file_400(client: TestClient) -> None:
     res = client.post("/upload", files={"audio": ("empty.wav", b"", "audio/wav")})
     assert res.status_code == 400
+
+
+def test_upload_job_404(client: TestClient) -> None:
+    res = client.get("/jobs/does-not-exist")
+    assert res.status_code == 404

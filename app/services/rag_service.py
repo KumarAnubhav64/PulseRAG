@@ -43,9 +43,15 @@ class RAGService:
 
     # --- Ingest ---------------------------------------------------------
 
-    def ingest(self, audio_bytes: bytes, filename: str) -> UploadResponse:
+    def ingest(self, source: bytes | str, filename: str) -> UploadResponse:
+        """Transcribe + index an audio source and return the result.
+
+        ``source`` is either raw audio bytes (legacy callers) or a path to an
+        on-disk audio file (streamed uploads). Streaming to disk keeps the
+        whole file out of RAM during the request.
+        """
         conversation_id = uuid.uuid4().hex
-        transcript, demo = self._transcription.transcribe(audio_bytes, filename)
+        transcript, demo = self._transcription.transcribe(source, filename)
         self._transcripts.save(conversation_id, transcript)
         chunks = self._splitter.split_text(transcript)
         chunk_count = self._vectors.store_chunks(conversation_id, chunks)

@@ -38,10 +38,17 @@ uv run python scripts/make_sample_audio.py     # writes sample_audio.wav
 
 | Method | Path | Body/Param | Returns |
 |---|---|---|---|
-| `POST` | `/upload` | multipart `audio` file (<25MB) | `{conversation_id, chunk_count, transcript_length, demo}` |
+| `POST` | `/upload` | multipart `audio` file (<25MB) | `{job_id, status}` — async; poll below |
+| `GET` | `/jobs/{job_id}` | path param | `{job_id, status, upload?, error?}` — `status` is `pending` \| `processing` \| `done` \| `failed` |
 | `POST` | `/ask` | `{conversation_id, question}` | `{answer, sources[], cached, demo}` |
 | `GET` | `/transcript/{conversation_id}` | path param | `{conversation_id, transcript}` |
 | `GET` | `/health` | — | `{status, demo_mode, groq_key_configured, redis_connected, embedding_backend, version}` |
+
+Uploads are processed **asynchronously**: `POST /upload` streams the file to a
+temp file (keeping it out of RAM), returns a job id, and transcribes + indexes
+in the background. Poll `GET /jobs/{job_id}` until `status` is `done` (then
+`upload` holds `{conversation_id, chunk_count, transcript_length, demo}`) or
+`failed` (`error` explains why).
 
 `/health` reveals *whether* a Groq key is configured — never the key itself.
 
@@ -62,6 +69,7 @@ Groq calls (and real failures without a key).
 | `TOP_K` | `4` | Chunks fed to the LLM |
 | `CACHE_TTL_SECONDS` | `3600` | Answer cache TTL |
 | `MAX_UPLOAD_MB` | `25` | Upload size limit |
+| `PRELOAD_EMBEDDINGS` | `true` | Load the embedding model at startup instead of on the first upload — keeps the memory spike out of the request path on small instances |
 
 ## Project layout
 
@@ -102,8 +110,8 @@ uv run pytest
 
 ## Known limitations (Phase 1)
 
-- Transcripts and FAISS indexes are **in-memory** — restarting the app clears them.
-- No speaker diarization, no async ingestion queue, no auth (fine locally).
+- Transcripts, FAISS indexes, and in-flight jobs are **in-memory** — restarting the app clears them.
+- No speaker diarization, no auth (fine locally).
 - Demo mode is mock, not real.
 - Groq free-tier rate limits apply (retry/backoff is a later step).
 
