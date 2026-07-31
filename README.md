@@ -110,4 +110,7 @@ uv run pytest
 ## Roadmap
 
 - **Phase 2:** simple browser frontend (upload + chat).
-- **Phase 3:** deploy to Render (free, no credit card) with the `fastembed` backend.
+- **Phase 3:** deployed to Render (free, no credit card). **Local dev uses
+`sentence_transformers` (torch); the deployed Render service uses `fastembed`
+(ONNX)** — the same model, but fastembed fits Render's 512MB free tier where
+torch (~1-2GB) would OOM. `EMBEDDING_BACKEND` selects the backend per env.

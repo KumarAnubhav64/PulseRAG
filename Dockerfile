@@ -11,6 +11,10 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     HF_HOME=/app/.cache/huggingface \
+    # fastembed does NOT use HF_HOME — it caches to FASTEMBED_CACHE_PATH.
+    # Pin it to the same /app/.cache tree so the model baked below is found
+    # at runtime (the bake and runtime must share this exact path).
+    FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
@@ -24,10 +28,11 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 # Bake the embedding model at build time (needs internet during `docker build`).
 # Which model cache gets baked is driven by the build arg so the image always
-# ships the backend it will actually use (e.g. fastembed for Render's 512MB).
+# ships the backend it will actually use: sentence_transformers (torch) locally,
+# fastembed (ONNX) for the 512MB Render deploy.
 ARG EMBEDDING_BACKEND=sentence_transformers
 RUN if [ "$EMBEDDING_BACKEND" = "fastembed" ]; then \
-      uv run python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='all-MiniLM-L6-v2')"; \
+      uv run python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')"; \
     else \
       uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"; \
     fi

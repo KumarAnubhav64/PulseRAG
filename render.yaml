@@ -8,8 +8,10 @@
 #   4. Deploy. The free tier spins down after ~15 min idle (~1 min cold start).
 #
 # Notes:
-#   - EMBEDDING_BACKEND=fastembed (ONNX, ~150-250MB) is required to fit
-#     Render's 512MB free tier. The Dockerfile bakes the model at build time.
+#   - EMBEDDING_BACKEND=fastembed (ONNX, ~150-250MB) — REQUIRED to fit Render's
+#     512MB free tier. Local dev keeps sentence_transformers (torch); only this
+#     deployed service runs fastembed. The Dockerfile bakes the model at build
+#     time (HF_HOME + FASTEMBED_CACHE_PATH cache).
 #   - Render free has no managed Redis → the app's in-memory cache fallback
 #     handles production automatically (REDIS_URL optional).
 services:
@@ -28,5 +30,7 @@ services:
         sync: false # Set securely in the Render dashboard (never committed)
       - key: EMBEDDING_BACKEND
         value: fastembed
+      - key: FASTEMBED_CACHE_PATH
+        value: /app/.cache/fastembed
       - key: DEMO_MODE
         value: auto

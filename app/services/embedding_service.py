@@ -11,6 +11,15 @@ and defers the ~90MB one-time model download until the first ingest/ask.
 from langchain_core.embeddings import Embeddings
 
 
+# fastembed's registry uses full HF-style names (e.g.
+# "sentence-transformers/all-MiniLM-L6-v2"), not the bare short name that
+# HuggingFaceEmbeddings accepts. Map short → registry name so the same
+# EMBEDDING_MODEL setting works for both backends.
+_FASTEMBED_MODEL_ALIASES = {
+    "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+}
+
+
 class EmbeddingService:
     def __init__(self, backend: str, model_name: str) -> None:
         self._backend = backend
@@ -26,7 +35,8 @@ class EmbeddingService:
             if self._backend == "fastembed":
                 from langchain_community.embeddings import FastEmbedEmbeddings
 
-                self._embeddings = FastEmbedEmbeddings(model_name=self._model_name)
+                model = _FASTEMBED_MODEL_ALIASES.get(self._model_name, self._model_name)
+                self._embeddings = FastEmbedEmbeddings(model_name=model)
             else:
                 from langchain_huggingface import HuggingFaceEmbeddings
 
