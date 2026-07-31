@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PulseRAG — Audio Q&A</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg-soft: #101527;
+    --card: rgba(255, 255, 255, 0.045);
+    --card-border: rgba(255, 255, 255, 0.09);
+    --text: #e7ecf7;
+    --text-dim: #9aa5c0;
+    --accent: #6d5df6;
+    --accent-2: #38bdf8;
+    --accent-3: #a78bfa;
+    --danger: #f87171;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --radius: 16px;
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(1100px 500px at 85% -10%, rgba(109, 93, 246, 0.22), transparent 60%),
+      radial-gradient(900px 480px at 0% 110%, rgba(56, 189, 248, 0.14), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--card-border);
+    background: rgba(10, 14, 26, 0.6);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { width: 30px; height: 30px; }
+  .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+  .brand span { color: var(--text-dim); font-weight: 500; font-size: 13px; }
+
+  .status-chip {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--card-border);
+    background: var(--card);
+    color: var(--text-dim);
+    transition: all 0.25s ease;
+  }
+  .status-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); transition: background 0.3s; }
+  .status-chip.live { color: var(--ok); border-color: rgba(52, 211, 153, 0.35); }
+  .status-chip.live .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 2s infinite; }
+  .status-chip.demo { color: var(--warn); border-color: rgba(251, 191, 36, 0.35); }
+  .status-chip.demo .dot { background: var(--warn); }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ---------- Layout ---------- */
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .card-head h2 { font-size: 15px; font-weight: 650; letter-spacing: 0.01em; }
+  .card-head .sub { font-size: 12px; color: var(--text-dim); }
+
+  .card-body { padding: 20px; }
+
+  /* ---------- Recorder ---------- */
+  .recorder { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 10px 0 4px; }
+
+  .mic-btn {
+    width: 92px; height: 92px; border-radius: 50%;
+    border: none; cursor: pointer; position: relative;
+    background: linear-gradient(135deg, var(--accent), var(--accent-3));
+    color: white; display: grid; place-items: center;
+    box-shadow: 0 12px 34px rgba(109, 93, 246, 0.45);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .mic-btn:hover { transform: scale(1.06); box-shadow: 0 14px 42px rgba(109, 93, 246, 0.6); }
+  .mic-btn:active { transform: scale(0.96); }
+  .mic-btn svg { width: 34px; height: 34px; }
+  .mic-btn .ring {
+    position: absolute; inset: -8px; border-radius: 50%;
+    border: 2px solid var(--danger); opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .mic-btn.recording { background: linear-gradient(135deg, #ef4444, #f87171); animation: breathe 1.4s ease-in-out infinite; }
+  .mic-btn.recording .ring { opacity: 0.9; animation: ripple 1.4s ease-out infinite; }
+  .mic-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  @keyframes breathe { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5);} 50% { box-shadow: 0 0 0 14px rgba(239,68,68,0);} }
+  @keyframes ripple { 0% { transform: scale(1); opacity: 0.9;} 100% { transform: scale(1.5); opacity: 0;} }
+
+  .timer { font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 600; color: var(--text-dim); min-height: 22px; }
+  .timer.recording { color: var(--danger); }
+
+  .eq { display: flex; gap: 4px; height: 22px; align-items: flex-end; }
+  .eq span { width: 4px; border-radius: 2px; background: var(--accent-2); animation: eq 0.9s ease-in-out infinite; }
+  .eq span:nth-child(1) { height: 8px; } .eq span:nth-child(2) { height: 18px; animation-delay: 0.15s; }
+  .eq span:nth-child(3) { height: 12px; animation-delay: 0.3s; } .eq span:nth-child(4) { height: 20px; animation-delay: 0.45s; }
+  .eq span:nth-child(5) { height: 10px; animation-delay: 0.6s; }
+  .eq.paused span { animation-play-state: paused; opacity: 0.35; }
+  @keyframes eq { 0%,100% { transform: scaleY(0.5);} 50% { transform: scaleY(1);} }
+
+  .or-divider { display: flex; align-items: center; gap: 12px; width: 100%; color: var(--text-dim); font-size: 12px; }
+  .or-divider::before, .or-divider::after { content: ""; flex: 1; height: 1px; background: var(--card-border); }
+
+  .file-btn {
+    width: 100%; padding: 13px; border-radius: 12px;
+    border: 1px dashed rgba(255,255,255,0.22); cursor: pointer;
+    background: rgba(255,255,255,0.03); color: var(--text-dim);
+    font-size: 13.5px; font-weight: 550; transition: all 0.2s ease;
+  }
+  .file-btn:hover { border-color: var(--accent-2); color: var(--text); background: rgba(56,189,248,0.07); }
+  .file-btn input { display: none; }
+
+  /* ---------- Conversation info ---------- */
+  .conv-info { margin-top: 20px; border-top: 1px solid var(--card-border); padding-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .conv-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+  .conv-row .k { color: var(--text-dim); }
+  .conv-row .v { font-weight: 600; word-break: break-all; text-align: right; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; letter-spacing: 0.03em; }
+  .badge.demo { background: rgba(251,191,36,0.14); color: var(--warn); }
+  .badge.real { background: rgba(52,211,153,0.14); color: var(--ok); }
+  .badge.cached { background: rgba(56,189,248,0.14); color: var(--accent-2); }
+
+  .text-btn {
+    background: none; border: 1px solid var(--card-border); color: var(--accent-2);
+    font-size: 12.5px; font-weight: 600; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+    transition: all 0.2s ease; width: 100%;
+  }
+  .text-btn:hover { background: rgba(56,189,248,0.08); border-color: rgba(56,189,248,0.4); }
+
+  /* ---------- Chat ---------- */
+  .chat-body { display: flex; flex-direction: column; height: 620px; }
+  @media (max-width: 900px) { .chat-body { height: 520px; } }
+
+  .chat-log { flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
+
+  .msg { max-width: 78%; display: flex; flex-direction: column; gap: 6px; animation: rise 0.3s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none;} }
+
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.bot { align-self: flex-start; align-items: flex-start; }
+
+  .bubble { padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+  .msg.user .bubble { background: linear-gradient(135deg, var(--accent), var(--accent-3)); color: white; border-bottom-right-radius: 4px; }
+  .msg.bot .bubble { background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); border-bottom-left-radius: 4px; }
+
+  .msg-meta { font-size: 11px; color: var(--text-dim); display: flex; gap: 8px; align-items: center; }
+
+  /* sources */
+  .sources { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 4px; }
+  .source {
+    border: 1px solid var(--card-border); border-radius: 12px; background: rgba(255,255,255,0.035);
+    padding: 11px 14px; font-size: 12.5px; color: var(--text-dim); line-height: 1.5;
+  }
+  .source .s-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .source .s-idx { font-weight: 700; color: var(--accent-2); font-size: 11px; letter-spacing: 0.05em; }
+  .source .s-score { font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+  .source .s-score.hi { background: rgba(52,211,153,0.14); color: var(--ok); }
+  .source .s-score.mid { background: rgba(251,191,36,0.14); color: var(--warn); }
+  .source .s-score.low { background: rgba(248,113,113,0.14); color: var(--danger); }
+
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-dim); text-align: center; padding: 30px; }
+  .empty-state svg { width: 54px; height: 54px; opacity: 0.5; }
+  .empty-state p { font-size: 13.5px; max-width: 320px; line-height: 1.6; }
+
+  /* typing */
+  .typing { display: flex; gap: 5px; padding: 6px 0; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); animation: blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; } .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100% { opacity: 0.25;} 40% { opacity: 1;} }
+
+  .chat-input-row { display: flex; gap: 10px; padding: 14px; border-top: 1px solid var(--card-border); background: rgba(10,14,26,0.4); }
+  .chat-input-row input {
+    flex: 1; padding: 13px 16px; border-radius: 12px; border: 1px solid var(--card-border);
+    background: rgba(255,255,255,0.05); color: var(--text); font-size: 14px; outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .chat-input-row input:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(56,189,248,0.15); }
+  .chat-input-row input::placeholder { color: #5d6880; }
+  .send-btn {
+    padding: 0 22px; border: none; border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: 650;
+    background: linear-gradient(135deg, var(--accent), var(--accent-3)); color: white;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .send-btn:hover { transform: translateY(-1px); }
+  .send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: rgba(20, 26, 46, 0.96); border: 1px solid var(--card-border); color: var(--text);
+    padding: 13px 20px; border-radius: 12px; font-size: 13.5px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 50; max-width: 90vw;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.error { border-color: rgba(248,113,113,0.5); }
+  .toast.error .t-ic { color: var(--danger); }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.25); border-top-color: white; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { text-align: center; padding: 18px; font-size: 12px; color: #4c5872; }
+  footer code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="24" y2="24">
+          <stop offset="0%" stop-color="#6d5df6"/><stop offset="100%" stop-color="#38bdf8"/>
+        </linearGradient>
+      </defs>
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+    </svg>
+    <div>
+      <h1>PulseRAG</h1>
+      <span>Audio Q&amp;A</span>
+    </div>
+  </div>
+  <div id="statusChip" class="status-chip"><span class="dot"></span><span id="statusText">Checking…</span></div>
+</header>
+
+<main>
+  <!-- Left: recorder -->
+  <section class="card">
+    <div class="card-head">
+      <h2>🎤 Capture audio</h2>
+      <span class="sub">mic → Groq Whisper</span>
+    </div>
+    <div class="card-body">
+      <div class="recorder">
+        <button id="micBtn" class="mic-btn" title="Record from microphone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <span class="ring"></span>
+        </button>
+        <div class="timer" id="timer">Ready — click to record</div>
+        <div class="eq paused" id="eq"><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+
+      <div class="or-divider">or upload a file</div>
+
+      <label class="file-btn">
+        📁 Choose audio file (max 25MB)
+        <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" />
+      </label>
+
+      <div class="conv-info" id="convInfo" hidden>
+        <div class="conv-row"><span class="k">Conversation</span><span class="v" id="convId">—</span></div>
+        <div class="conv-row"><span class="k">Indexed</span><span class="v" id="convStats">—</span></div>
+        <button class="text-btn" id="transcriptBtn">📄 Show transcript</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right: chat -->
+  <section class="card">
+    <div class="card-head">
+      <h2>💬 Ask about the audio</h2>
+      <span class="sub">grounded RAG · FAISS + Groq</span>
+    </div>
+    <div class="chat-body">
+      <div class="chat-log" id="chatLog">
+        <div class="empty-state" id="emptyState">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>Record from your mic or upload an audio file, then ask a question like <em>"what did the customer say about pricing?"</em></p>
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <input id="questionInput" type="text" placeholder="Ask a question about the audio…" autocomplete="off" />
+        <button class="send-btn" id="sendBtn">Ask</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>PulseRAG <code>v0.1.0</code> · FastAPI + LangChain + FAISS + Groq</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- State ----------
+  let conversationId = null;
+  let mediaRecorder = null;
+  let mediaStream = null;
+  let chunks = [];
+  let recSeconds = 0;
+  let timerInterval = null;
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const micBtn = $("micBtn"), timer = $("timer"), eq = $("eq");
+  const chatLog = $("chatLog"), emptyState = $("emptyState");
+  const questionInput = $("questionInput"), sendBtn = $("sendBtn");
+  const convInfo = $("convInfo"), convId = $("convId"), convStats = $("convStats");
+  const statusChip = $("statusChip"), statusText = $("statusText");
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function toast(msg, isError) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.className = "toast show" + (isError ? " error" : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.className = "toast"), 3200);
+  }
+
+  // ---------- Health ----------
+  async function loadHealth() {
+    try {
+      const res = await fetch("/health");
+      const d = await res.json();
+      if (d.demo_mode) {
+        statusChip.className = "status-chip demo";
+        statusText.textContent = "DEMO MODE — no API key";
+      } else {
+        statusChip.className = "status-chip live";
+        statusText.textContent = "LIVE · Groq connected" + (d.redis_connected ? " · Redis" : "");
+      }
+    } catch {
+      statusChip.className = "status-chip";
+      statusText.textContent = "API unreachable";
+    }
+  }
+
+  // ---------- Recording ----------
+  let micStarting = false; // guards against double-click while getUserMedia is pending
+
+  function setRecordingUI(on) {
+    micBtn.classList.toggle("recording", on);
+    timer.classList.toggle("recording", on);
+    eq.classList.toggle("paused", !on);
+  }
+
+  async function toggleRecording() {
+    if (micStarting) return; // already requesting mic permission
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("Mic not supported in this browser — use the file upload instead.", true);
+      return;
+    }
+    micStarting = true;
+    micBtn.disabled = true;
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      toast(
+        e && e.name === "NotFoundError"
+          ? "No microphone found — upload a file instead."
+          : "Microphone access denied. Allow mic permission or upload a file.",
+        true
+      );
+      micStarting = false;
+      micBtn.disabled = false;
+      return;
+    }
+    micStarting = false;
+    micBtn.disabled = false;
+
+    chunks = [];
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus" : undefined;
+    mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      clearInterval(timerInterval);
+      recSeconds = 0;
+      setRecordingUI(false);
+      timer.textContent = "Ready — click to record";
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      if (!blob.size) {
+        toast("Recording was empty — try again.", true);
+        mediaStream.getTracks().forEach((t) => t.stop());
+        mediaRecorder = null; mediaStream = null;
+        return;
+      }
+      const ext = (mediaRecorder.mimeType || "").includes("ogg") ? "ogg" : "webm";
+      uploadAudio(blob, "mic-recording." + ext);
+      mediaStream.getTracks().forEach((t) => t.stop());
+      mediaRecorder = null; mediaStream = null;
+    };
+
+    recSeconds = 0;
+    timer.textContent = "Recording…";
+    timerInterval = setInterval(() => {
+      recSeconds += 1;
+      const m = String(Math.floor(recSeconds / 60)).padStart(2, "0");
+      const s = String(recSeconds % 60).padStart(2, "0");
+      timer.textContent = `Recording ${m}:${s} — click mic to stop`;
+    }, 1000);
+
+    setRecordingUI(true);
+    mediaRecorder.start();
+  }
+
+  // ---------- Upload ----------
+  async function uploadAudio(blob, filename) {
+    micBtn.disabled = true;
+    sendBtn.disabled = true;
+    toast("Uploading & transcribing…");
+    const fd = new FormData();
+    fd.append("audio", blob, filename);
+    try {
+      const res = await fetch("/upload", { method: "POST", body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.detail || `Upload failed (HTTP ${res.status})`);
+      conversationId = d.conversation_id;
+      convId.textContent = conversationId;
+      convStats.textContent = `${d.chunk_count} chunks · ${d.transcript_length} chars`;
+      convInfo.hidden = false;
+      const badge = d.demo ? '<span class="badge demo">DEMO</span>' : '<span class="badge real">REAL</span>';
+      convStats.innerHTML = `${d.chunk_count} chunks · ${d.transcript_length} chars ${badge}`;
+      addBotMessage("✅ Audio indexed. You can now ask questions about it.", { small: true });
+      toast(`Uploaded: ${d.chunk_count} chunk(s) indexed`);
+      emptyState.hidden = true;
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      micBtn.disabled = false;
+      sendBtn.disabled = false;
+      questionInput.focus();
+    }
+  }
+
+  // ---------- Ask ----------
+  async function ask() {
+    const q = questionInput.value.trim();
+    if (!q) return;
+    if (!conversationId) { toast("Record or upload audio first.", true); return; }
+
+    addUserMessage(q);
+    questionInput.value = "";
+    const typing = addTyping();
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: conversationId, question: q }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.detail || `Ask failed (HTTP ${res.status})`);
+      typing.remove();
+      renderAnswer(d);
+    } catch (err) {
+      typing.remove();
+      addBotMessage("⚠️ " + err.message, { small: true });
+    } finally {
+      sendBtn.disabled = false;
+      questionInput.focus();
+    }
+  }
+
+  function renderAnswer(d) {
+    const meta = [];
+    if (d.cached) meta.push('<span class="badge cached">CACHED</span>');
+    meta.push(d.demo ? '<span class="badge demo">DEMO</span>' : '<span class="badge real">REAL</span>');
+
+    const wrap = el("div", "msg bot");
+    const bubble = el("div", "bubble");
+    bubble.textContent = d.answer;
+    wrap.appendChild(bubble);
+    const metaEl = el("div", "msg-meta");
+    metaEl.innerHTML = meta.join(" ");
+    wrap.appendChild(metaEl);
+
+    if (d.sources && d.sources.length) {
+      const srcs = el("div", "sources");
+      d.sources.forEach((s, i) => {
+        const card = el("div", "source");
+        const head = el("div", "s-head");
+        const idx = el("span", "s-idx");
+        idx.textContent = "SOURCE " + (i + 1);
+        const score = el("span", "s-score " + scoreClass(s.score));
+        score.textContent = "rel. " + s.score.toFixed(2);
+        head.appendChild(idx); head.appendChild(score);
+        const text = el("span");
+        text.textContent = s.text;
+        card.appendChild(head); card.appendChild(text);
+        srcs.appendChild(card);
+      });
+      wrap.appendChild(srcs);
+    }
+    chatLog.appendChild(wrap);
+    scrollBottom();
+  }
+
+  function scoreClass(score) {
+    if (score >= 0.4) return "hi";
+    if (score >= 0.15) return "mid";
+    return "low";
+  }
+
+  // ---------- Transcript ----------
+  async function showTranscript() {
+    if (!conversationId) return;
+    try {
+      const res = await fetch("/transcript/" + conversationId);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.detail || "Could not load transcript");
+      addBotMessage("📄 Transcript:\n" + d.transcript);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // ---------- Helpers ----------
+  function el(tag, cls) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    return n;
+  }
+  function addUserMessage(text) {
+    const wrap = el("div", "msg user");
+    const b = el("div", "bubble");
+    b.textContent = text;
+    wrap.appendChild(b);
+    chatLog.appendChild(wrap);
+    scrollBottom();
+  }
+  function addBotMessage(text, opts) {
+    const wrap = el("div", "msg bot");
+    const b = el("div", "bubble");
+    if (opts && opts.small) b.style.fontSize = "12.5px";
+    b.textContent = text;
+    wrap.appendChild(b);
+    chatLog.appendChild(wrap);
+    scrollBottom();
+  }
+  function addTyping() {
+    const wrap = el("div", "msg bot");
+    const t = el("div", "typing");
+    t.innerHTML = "<span></span><span></span><span></span>";
+    wrap.appendChild(t);
+    chatLog.appendChild(wrap);
+    scrollBottom();
+    return t;
+  }
+  function scrollBottom() {
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  // ---------- Events ----------
+  micBtn.addEventListener("click", toggleRecording);
+  sendBtn.addEventListener("click", ask);
+  questionInput.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+  $("fileInput").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (f) uploadAudio(f, f.name);
+    e.target.value = "";
+  });
+  $("transcriptBtn").addEventListener("click", showTranscript);
+
+  loadHealth();
+})();
+</script>
+</body>
+</html>
