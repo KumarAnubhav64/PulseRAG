@@ -18,6 +18,10 @@ build/
 sample_audio.wav
 *.wav
 
+# Local demo helper scripts (not part of the app)
+scripts/demo_ask.py
+scripts/search_archive.py
+
 # OS / editor
 .DS_Store
 .idea/
