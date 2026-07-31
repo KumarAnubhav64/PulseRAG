@@ -1,0 +1,42 @@
+# Secrets — never send these to the build context
+.env
+.env.*
+!.env.example
+
+# Local tooling / venv (5GB+ — must never reach the build context)
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Git
+.git/
+.gitignore
+
+# Caches
+.cache/
+.cache/huggingface/
+
+# Tests & docs (not needed in the runtime image)
+tests/
+README.md
+IMPLEMENTATION_PLAN.md
+PulseRAG_Documentation.md
+
+# Large local audio assets
+*.wav
+*.mp3
+podcast_demo.mp3
+sample_audio.wav
+
+# Local demo helper scripts
+scripts/demo_ask.py
+scripts/search_archive.py
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

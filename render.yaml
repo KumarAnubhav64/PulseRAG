@@ -1,0 +1,32 @@
+# Render blueprint — PulseRAG web service.
+#
+# How to deploy:
+#   1. Push this repo to GitHub (render.yaml must be on the default branch).
+#   2. Render dashboard → New → Blueprint → connect the GitHub repo.
+#   3. Render will prompt for the `sync: false` env var (GROQ_API_KEY) — paste
+#      your key there (Render stores it as a secret, never in the repo).
+#   4. Deploy. The free tier spins down after ~15 min idle (~1 min cold start).
+#
+# Notes:
+#   - EMBEDDING_BACKEND=fastembed (ONNX, ~150-250MB) is required to fit
+#     Render's 512MB free tier. The Dockerfile bakes the model at build time.
+#   - Render free has no managed Redis → the app's in-memory cache fallback
+#     handles production automatically (REDIS_URL optional).
+services:
+  - type: web
+    name: pulserag
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      EMBEDDING_BACKEND: fastembed
+    port: 8000
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false # Set securely in the Render dashboard (never committed)
+      - key: EMBEDDING_BACKEND
+        value: fastembed
+      - key: DEMO_MODE
+        value: auto
