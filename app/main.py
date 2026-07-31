@@ -4,6 +4,7 @@ Run with:  uv run uvicorn app.main:app --reload
 """
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -13,7 +14,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import _get_rag_service, router
+from .api.routes import _get_rag_service, router
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +25,24 @@ logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+def _warmup_embeddings() -> None:
+    """Load the embedding model; failures must not take the app down."""
+    try:
+        _get_rag_service()
+    except Exception as exc:  # keep the app bootable if the model can't load
+        logger.warning("Embedding model preload failed at startup: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     if settings.preload_embeddings:
-        try:
-            # Force the (cached) RAG service into existence now so the embedding
-            # model loads at boot — not on the first upload, where the ~200-300MB
-            # load spike could push a small instance past its memory limit
-            # mid-request (the cause of the Render free-tier 502s).
-            _get_rag_service()
-        except Exception as exc:  # keep the app bootable if the model can't load
-            logger.warning("Embedding model preload failed at startup: %s", exc)
+        # Warm the model in a daemon thread: uvicorn won't serve until lifespan
+        # startup returns, and blocking here could let Render time out a slow
+        # 0.1-CPU boot. The model still loads before the first upload finishes
+        # streaming, so the ~200-300MB spike stays out of the request path (the
+        # cause of the Render free-tier 502s).
+        threading.Thread(target=_warmup_embeddings, daemon=True).start()
     yield
 
 
