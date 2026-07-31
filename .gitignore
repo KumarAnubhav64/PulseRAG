@@ -18,9 +18,11 @@ build/
 sample_audio.wav
 *.wav
 
-# Local demo helper scripts (not part of the app)
+# Local demo/diagnostic helper scripts (not part of the app)
 scripts/demo_ask.py
 scripts/search_archive.py
+scripts/compare_backends.py
+scripts/smoke_live.py
 
 # OS / editor
 .DS_Store

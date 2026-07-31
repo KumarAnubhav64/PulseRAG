@@ -2,6 +2,9 @@ services:
   api:
     build:
       context: .
+      # Note: EMBEDDING_BACKEND is no longer consumed as a Docker build arg
+      # (the image bakes both models); the runtime env var below selects the
+      # backend.
       args:
         EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-sentence_transformers}
     ports:
