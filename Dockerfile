@@ -26,17 +26,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Bake the embedding model at build time (needs internet during `docker build`).
-# Which model cache gets baked is driven by the build arg so the image always
-# ships the backend it will actually use: sentence_transformers (torch) locally,
-# fastembed (ONNX) for the 512MB Render deploy.
-ARG EMBEDDING_BACKEND=sentence_transformers
-RUN if [ "$EMBEDDING_BACKEND" = "fastembed" ]; then \
-      uv run python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')"; \
-    else \
-      uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"; \
-    fi
-ENV EMBEDDING_BACKEND=${EMBEDDING_BACKEND}
+# Bake BOTH embedding models at build time (needs internet during `docker build`).
+# Render's blueprint spec has no dockerBuildArgs field, so instead of an ARG-
+# driven bake we ship both caches and let the runtime EMBEDDING_BACKEND env var
+# select the backend. Extra image size (~90MB) is the tradeoff; RAM at runtime
+# is unaffected (only the selected backend loads).
+RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+ && uv run python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')"
 
 # Runtime: embeddings are fully offline
 ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1

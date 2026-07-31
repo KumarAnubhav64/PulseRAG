@@ -32,9 +32,12 @@ PulseRAG_Documentation.md
 podcast_demo.mp3
 sample_audio.wav
 
-# Local demo helper scripts
+# Local demo/diagnostic helper scripts (not part of the app)
 scripts/demo_ask.py
 scripts/search_archive.py
+scripts/compare_backends.py
+scripts/smoke_live.py
+scripts/check_render_schema.py
 
 # OS / editor
 .DS_Store
