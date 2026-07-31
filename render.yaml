@@ -36,3 +36,7 @@ services:
       # memory mid-request and OOM the 512MB free instance.
       - key: PRELOAD_EMBEDDINGS
         value: true
+      # Cap onnxruntime to one thread: Render free reports the host's cores,
+      # and a per-core thread pool alone can push RAM past 512MB.
+      - key: OMP_NUM_THREADS
+        value: "1"

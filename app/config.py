@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # --- Embeddings (local, free, offline after first download) ---
     embedding_backend: str = "sentence_transformers"  # or "fastembed"
     embedding_model: str = "all-MiniLM-L6-v2"
+    # onnxruntime spawns one intra-op thread per *reported* CPU core by default;
+    # small instances (Render free reports the host's cores while only 0.1 CPU is
+    # allocated) can balloon RAM past 512MB just from thread workspace. Cap it.
+    embedding_threads: int = 1
 
     # --- RAG tuning ---
     chunk_size: int = 500

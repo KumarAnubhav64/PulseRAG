@@ -11,6 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     HF_HOME=/app/.cache/huggingface \
+    # Cap onnxruntime/native thread pools to 1 (small instances over-report cores)
+    OMP_NUM_THREADS=1 \
     # fastembed does NOT use HF_HOME — it caches to FASTEMBED_CACHE_PATH.
     # Pin it to the same /app/.cache tree so the model baked below is found
     # at runtime (the bake and runtime must share this exact path).

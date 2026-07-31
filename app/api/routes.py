@@ -61,7 +61,9 @@ def _get_job_repository() -> JobRepository:
 def _get_rag_service() -> RAGService:
     settings = get_settings()
     embedding_service = EmbeddingService(
-        settings.embedding_backend, settings.embedding_model
+        settings.embedding_backend,
+        settings.embedding_model,
+        threads=settings.embedding_threads,
     )
     return RAGService(
         settings=settings,

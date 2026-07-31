@@ -23,9 +23,10 @@ _FASTEMBED_MODEL_ALIASES = {
 
 
 class EmbeddingService:
-    def __init__(self, backend: str, model_name: str) -> None:
+    def __init__(self, backend: str, model_name: str, threads: int = 1) -> None:
         self._backend = backend
         self._model_name = model_name
+        self._threads = threads
         self._embeddings: Embeddings | None = None
         # Guards lazy init so a boot-time warmup thread and a first request can't
         # both load the model (double load = double RAM on a small instance).
@@ -46,7 +47,9 @@ class EmbeddingService:
                     model = _FASTEMBED_MODEL_ALIASES.get(
                         self._model_name, self._model_name
                     )
-                    self._embeddings = FastEmbedEmbeddings(model_name=model)
+                    self._embeddings = FastEmbedEmbeddings(
+                        model_name=model, threads=self._threads
+                    )
                 else:
                     from langchain_huggingface import HuggingFaceEmbeddings
 

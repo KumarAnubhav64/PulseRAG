@@ -65,6 +65,7 @@ Groq calls (and real failures without a key).
 | `REDIS_URL` | `redis://localhost:6379/0` | Falls back to an in-memory TTL cache if unreachable |
 | `EMBEDDING_BACKEND` | `sentence_transformers` | `sentence_transformers` (torch) \| `fastembed` (ONNX, low-RAM) |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | ~90MB, downloaded once on first use |
+| `EMBEDDING_THREADS` | `1` | onnxruntime intra-op threads — cap it on small instances to stay under the RAM limit |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `500` / `50` | Chunking for retrieval |
 | `TOP_K` | `4` | Chunks fed to the LLM |
 | `CACHE_TTL_SECONDS` | `3600` | Answer cache TTL |
