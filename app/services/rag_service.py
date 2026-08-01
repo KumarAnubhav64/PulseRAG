@@ -26,29 +26,33 @@ _SEPARATORS = ("\n\n", "\n", ". ", " ", "")
 
 
 def _recursive_split(text: str, chunk_size: int, out: list[str]) -> None:
-    if len(text) <= chunk_size:
-        out.append(text)
-        return
-    for sep in _SEPARATORS:
-        if not sep:
-            break
-        # Split while KEEPING the separator as its own token (regex capture
-        # group). This guarantees every part is strictly shorter than the input
-        # — no part ends with the separator it was split on — so the recursion
-        # always terminates. A naive "split + re-attach" approach can loop
-        # forever on dense text (e.g. a long transcript with no paragraph
-        # breaks), which surfaced as a RecursionError on real uploads.
-        parts = re.split(f"({re.escape(sep)})", text)
-        if len(parts) > 1:
-            for part in parts:
-                if part:
-                    _recursive_split(part, chunk_size, out)
-            return
-    # No separator found: hard-slice at chunk_size.
-    out.append(text[:chunk_size])
-    rest = text[chunk_size:]
-    if rest:
-        _recursive_split(rest, chunk_size, out)
+    # Convert recursion to an explicit stack to avoid Python's recursion
+    # depth limits on very long transcripts. The algorithm mirrors the
+    # original: repeatedly try each separator (paragraph -> sentence -> word)
+    # and only hard-slice when no separator applies.
+    stack = [text]
+    while stack:
+        current = stack.pop()
+        if len(current) <= chunk_size:
+            out.append(current)
+            continue
+        for sep in _SEPARATORS:
+            if not sep:
+                break
+            parts = re.split(f"({re.escape(sep)})", current)
+            if len(parts) > 1:
+                # Push parts back onto the stack in reverse so they are
+                # processed in original order.
+                for part in reversed(parts):
+                    if part:
+                        stack.append(part)
+                break
+        else:
+            # No separator found: hard-slice at chunk_size and process rest.
+            out.append(current[:chunk_size])
+            rest = current[chunk_size:]
+            if rest:
+                stack.append(rest)
 
 
 def split_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
