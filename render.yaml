@@ -8,10 +8,12 @@
 #   4. Deploy. The free tier spins down after ~15 min idle (~1 min cold start).
 #
 # Notes:
-#   - EMBEDDING_BACKEND=fastembed (ONNX, ~150-250MB) - REQUIRED to fit Render's
-#     512MB free tier. Local dev keeps sentence_transformers (torch); only this
-#     deployed service runs fastembed. The Dockerfile bakes BOTH models at build
-#     time so no build arg is needed; the runtime env var selects the backend.
+#   - EMBEDDING_BACKEND=remote (Mistral API) - zero local model RAM, REQUIRED
+#     to fit Render's 512MB free tier. Local dev keeps sentence_transformers
+#     (torch); only this deployed service runs remote embeddings. Set the
+#     MISTRAL_API_KEY secret in the Render dashboard.
+#   - The image still bakes the local models at build time, so you can flip
+#     EMBEDDING_BACKEND back to fastembed at any time with no rebuild.
 #   - Render free has no managed Redis - the app's in-memory cache fallback
 #     handles production automatically (REDIS_URL optional).
 #   - Port is auto-detected by Render from the Dockerfile EXPOSE (8000).
@@ -27,9 +29,11 @@ services:
       - key: GROQ_API_KEY
         sync: false # Set securely in the Render dashboard (never committed)
       - key: EMBEDDING_BACKEND
-        value: fastembed
-      - key: FASTEMBED_CACHE_PATH
-        value: /app/.cache/fastembed
+        value: remote
+      - key: MISTRAL_API_KEY
+        sync: false # Set securely in the Render dashboard (never committed)
+      - key: REMOTE_EMBEDDING_MODEL
+        value: mistral-embed
       - key: DEMO_MODE
         value: auto
       # Load the embedding model at startup so the first upload doesn't spike

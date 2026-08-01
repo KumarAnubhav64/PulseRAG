@@ -14,10 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import _get_rag_service, router
-from .api.routes import _get_rag_service, router
 from .config import get_settings
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 

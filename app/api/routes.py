@@ -64,6 +64,9 @@ def _get_rag_service() -> RAGService:
         settings.embedding_backend,
         settings.embedding_model,
         threads=settings.embedding_threads,
+        api_key=settings.remote_embedding_api_key,
+        remote_model=settings.remote_embedding_model,
+        remote_base_url=settings.remote_embedding_base_url,
     )
     return RAGService(
         settings=settings,

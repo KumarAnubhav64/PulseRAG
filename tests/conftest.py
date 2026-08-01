@@ -20,11 +20,14 @@ os.environ.pop("GROQ_API_KEY", None)
 os.environ["PRELOAD_EMBEDDINGS"] = "false"
 
 import pytest
-from langchain_core.embeddings import Embeddings
 
 
-class StubEmbeddings(Embeddings):
-    """Deterministic, offline embeddings (no model download, no network)."""
+class StubEmbeddings:
+    """Deterministic, offline embeddings (no model download, no network).
+
+    Plain duck-typed class matching the app's minimal Embeddings interface
+    (embed_documents / embed_query) — no framework base class needed.
+    """
 
     def __init__(self, dim: int = 32) -> None:
         self._dim = dim

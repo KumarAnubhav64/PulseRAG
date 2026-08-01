@@ -69,19 +69,18 @@ def test_embedding_backend_property() -> None:
 
 
 def test_embedding_loads_fastembed(monkeypatch) -> None:
-    # Patch sys.modules with a stub so we never import the (torch-heavy)
-    # langchain_community.embeddings package — the service imports lazily
-    # inside get_embeddings(), so the stub is what it resolves.
+    # Patch sys.modules with a stub so we never import the real fastembed —
+    # the adapter imports it lazily inside __init__, so the stub is resolved.
     import sys
 
     fake = object()
     monkeypatch.setitem(
         sys.modules,
-        "langchain_community.embeddings",
-        SimpleNamespace(FastEmbedEmbeddings=lambda **kwargs: fake),
+        "fastembed",
+        SimpleNamespace(TextEmbedding=lambda **kwargs: fake),
     )
     svc = EmbeddingService("fastembed", "all-MiniLM-L6-v2")
-    assert svc.get_embeddings() is fake
+    assert svc.get_embeddings()._model is fake
 
 
 def test_embedding_loads_sentence_transformers(monkeypatch) -> None:
@@ -90,11 +89,17 @@ def test_embedding_loads_sentence_transformers(monkeypatch) -> None:
     fake = object()
     monkeypatch.setitem(
         sys.modules,
-        "langchain_huggingface",
-        SimpleNamespace(HuggingFaceEmbeddings=lambda **kwargs: fake),
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=lambda *a, **k: fake),
     )
     svc = EmbeddingService("sentence_transformers", "all-MiniLM-L6-v2")
-    assert svc.get_embeddings() is fake
+    assert svc.get_embeddings()._model is fake
+
+
+def test_embedding_loads_remote_requires_key() -> None:
+    svc = EmbeddingService("remote", "model", api_key="")
+    with pytest.raises(ValueError, match="Mistral API key"):
+        svc.get_embeddings()
 
 
 def test_embedding_is_lazy_and_cached(monkeypatch) -> None:
@@ -103,13 +108,13 @@ def test_embedding_is_lazy_and_cached(monkeypatch) -> None:
     fake = object()
     monkeypatch.setitem(
         sys.modules,
-        "langchain_huggingface",
-        SimpleNamespace(HuggingFaceEmbeddings=lambda **kwargs: fake),
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=lambda *a, **k: fake),
     )
     svc = EmbeddingService("sentence_transformers", "all-MiniLM-L6-v2")
     assert svc._embeddings is None  # lazy: not loaded until first use
-    assert svc.get_embeddings() is fake
-    assert svc.get_embeddings() is fake  # cached: same instance, no rebuild
+    assert svc.get_embeddings()._model is fake
+    assert svc.get_embeddings() is svc.get_embeddings()  # cached: same instance
 
 
 # --- LLMService ----------------------------------------------------------
@@ -140,25 +145,39 @@ def test_llm_demo_answer_general_question() -> None:
 def test_llm_real_path_builds_prompt_and_invokes(monkeypatch) -> None:
     captured = {}
 
+    class FakeChoice:
+        class Message:
+            content = "Grounded answer"
+
+        message = Message()
+
     class FakeResponse:
-        content = "Grounded answer"
+        choices = [FakeChoice()]
 
-    class FakeChatGroq:
-        def __init__(self, **kwargs):
+    class FakeCompletions:
+        def create(self, **kwargs):
             captured["kwargs"] = kwargs
-
-        def invoke(self, prompt):
-            captured["prompt"] = prompt
             return FakeResponse()
 
-    monkeypatch.setattr("app.services.llm_service.ChatGroq", FakeChatGroq)
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeGroq:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        @property
+        def chat(self):
+            return FakeChat()
+
+    monkeypatch.setattr("app.services.llm_service.Groq", FakeGroq)
     svc = LLMService(Settings(groq_api_key="sk-test", demo_mode="off"))
     answer, demo = svc.generate("What about pricing?", ["chunk one", "chunk two"])
     assert demo is False
     assert answer == "Grounded answer"
-    assert "[1] chunk one" in captured["prompt"]
-    assert "[2] chunk two" in captured["prompt"]
-    assert "QUESTION: What about pricing?" in captured["prompt"]
+    assert "[1] chunk one" in captured["kwargs"]["messages"][1]["content"]
+    assert "[2] chunk two" in captured["kwargs"]["messages"][1]["content"]
+    assert "QUESTION: What about pricing?" in captured["kwargs"]["messages"][1]["content"]
     assert captured["kwargs"]["temperature"] == 0
 
 
@@ -229,3 +248,37 @@ def test_rag_get_transcript(stub_embeddings, no_redis) -> None:
 def test_rag_cache_key_normalizes_question() -> None:
     assert RAGService._cache_key("c", "Hi There") == RAGService._cache_key("c", "hi there")
     assert RAGService._cache_key("c", "a") != RAGService._cache_key("d", "a")
+
+
+# --- Chunker (regression: dense text caused RecursionError) --------------
+
+
+def test_split_text_dense_text_terminates() -> None:
+    """Long text with no paragraph/sentence breaks must chunk without
+    hitting the recursion limit (regression for a real-upload RecursionError)."""
+    from app.services.rag_service import split_text
+
+    text = " ".join(f"word{i}" for i in range(2000))  # ~16k chars, no newlines
+    chunks = split_text(text, chunk_size=500, chunk_overlap=50)
+    assert len(chunks) >= 2
+    # Words/sentences stay intact and in order across the whole text.
+    assert chunks[0].startswith("word0")
+    assert chunks[-1].endswith("word1999")
+
+
+def test_split_text_preserves_separators() -> None:
+    from app.services.rag_service import split_text
+
+    text = "Hello world. This is a sentence.\n\nAnd a new paragraph here."
+    chunks = split_text(text, chunk_size=500, chunk_overlap=0)
+    assert chunks == [text]  # fits in one chunk, content unchanged
+
+
+def test_split_text_empty_and_oversized_overlap() -> None:
+    from app.services.rag_service import split_text
+
+    assert split_text("", 500, 50) == []
+    with pytest.raises(ValueError):
+        split_text("abc", 10, 10)  # overlap >= chunk_size rejected
+    with pytest.raises(ValueError):
+        split_text("abc", 0, 0)  # chunk_size must be > 0

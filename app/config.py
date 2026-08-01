@@ -7,6 +7,7 @@ Every other layer receives a typed ``Settings`` object; nothing else touches
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,13 +31,28 @@ class Settings(BaseSettings):
     # --- Storage ---
     redis_url: str = "redis://localhost:6379/0"
 
-    # --- Embeddings (local, free, offline after first download) ---
-    embedding_backend: str = "sentence_transformers"  # or "fastembed"
+    # --- Embeddings ---
+    # "sentence_transformers" (torch, ~760MB) | "fastembed" (ONNX, ~220MB) |
+    # "remote" (Mistral API, ~0MB — REQUIRED to fit Render free's 512MB).
+    embedding_backend: str = "sentence_transformers"
     embedding_model: str = "all-MiniLM-L6-v2"
     # onnxruntime spawns one intra-op thread per *reported* CPU core by default;
     # small instances (Render free reports the host's cores while only 0.1 CPU is
     # allocated) can balloon RAM past 512MB just from thread workspace. Cap it.
     embedding_threads: int = 1
+
+    # --- Remote embeddings (Mistral) — zero local model RAM ---
+    # Reads the key from MISTRAL_API_KEY (or REMOTE_EMBEDDING_API_KEY).
+    remote_embedding_api_key: str | None = Field(
+        default=None,
+        # Field name included so the value can be set either via env
+        # (MISTRAL_API_KEY) or programmatically (remote_embedding_api_key=...).
+        validation_alias=AliasChoices(
+            "MISTRAL_API_KEY", "REMOTE_EMBEDDING_API_KEY", "remote_embedding_api_key"
+        ),
+    )
+    remote_embedding_model: str = "mistral-embed"
+    remote_embedding_base_url: str = "https://api.mistral.ai/v1/embeddings"
 
     # --- RAG tuning ---
     chunk_size: int = 500

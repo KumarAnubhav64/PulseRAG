@@ -1,6 +1,10 @@
-"""Grounded answer generation via Groq (``ChatGroq``), with a mock fallback."""
+"""Grounded answer generation via Groq (raw SDK client), with a mock fallback.
 
-from langchain_groq import ChatGroq
+Uses the same ``groq`` package as the transcription service instead of
+``langchain-groq`` — one less heavy import in the boot path.
+"""
+
+from groq import Groq
 
 from ..config import Settings
 
@@ -21,17 +25,15 @@ class LLMService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._demo = settings.demo_enabled
-        self._llm: ChatGroq | None = None
+        self._client: Groq | None = None
 
-    def _get_llm(self) -> ChatGroq:
-        if self._llm is None:
-            self._llm = ChatGroq(
-                model=self._settings.groq_llm_model,
+    def _get_client(self) -> Groq:
+        if self._client is None:
+            self._client = Groq(
                 api_key=self._settings.groq_api_key,
-                temperature=0,
                 timeout=self._settings.groq_request_timeout_seconds,
             )
-        return self._llm
+        return self._client
 
     def generate(self, question: str, context_chunks: list[str]) -> tuple[str, bool]:
         """Return ``(answer, used_demo)``."""
@@ -44,8 +46,15 @@ class LLMService:
             f"TRANSCRIPT EXCERPTS:\n{context or '(no excerpts available)'}\n\n"
             f"QUESTION: {question}\n\nANSWER:"
         )
-        response = self._get_llm().invoke(prompt)
-        return str(response.content), False
+        response = self._get_client().chat.completions.create(
+            model=self._settings.groq_llm_model,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        return str(response.choices[0].message.content), False
 
     @staticmethod
     def _demo_answer(question: str, context_chunks: list[str]) -> str:
